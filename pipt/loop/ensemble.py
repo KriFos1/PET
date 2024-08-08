@@ -163,6 +163,83 @@ class Ensemble(PETEnsemble):
             self.keys_da['assimindex'] = [
                 [item for sublist in self.keys_da['assimindex'] for item in sublist]]
 
+    def function(self, x, *args, **kwargs):
+        """
+        This is the main function called during data assimilation.
+
+        Parameters
+        ----------
+        x : ndarray
+            Control vector, shape (number of controls, number of perturbations)
+
+        Returns
+        -------
+        obj_func_values : numpy.ndarray
+            Objective function values, shape (number of perturbations, )
+        """
+
+    def gradient(self, x, *args, **kwargs):
+        r"""
+           Calculate the preconditioned gradient associated with ensemble, defined as:
+
+           .. math::
+               S \approx C_x \times G^T
+
+           where :math:`C_x` is the state covariance matrix, and :math:`G` is the standard
+           gradient. The ensemble sensitivity matrix is calculated as:
+
+           .. math::
+               S = X \times J^T /(N_e-1)
+
+           where :math:`X` and :math:`J` are ensemble matrices of :math:`x` (or control variables) and objective function
+           perturbed by their respective means. In practice (and in this method), :math:`S` is calculated by perturbing the
+           current control variable with Gaussian random numbers from :math:`N(0, C_x)` (giving :math:`X`), running
+           the generated ensemble (:math:`X`) through the simulator to give an ensemble of objective function values
+           (:math:`J`), and in the end calculate :math:`S`. Note that :math:`S` is an :math:`N_x \times 1` vector, where
+           :math:`N_x` is length of the control vector and the objective function is scalar.
+
+           Parameters
+           ----------
+           x : ndarray
+               Control vector, shape (number of controls, )
+
+           args : tuple
+               Covarice (:math:`C_x`), shape (number of controls, number of controls)
+
+           Returns
+           -------
+           gradient : numpy.ndarray
+                   The gradient evaluated at x, shape (number of controls, )
+           """
+    def hessian(self, x, *args, **kwargs):
+        r"""
+            Calculate the hessian matrix associated with ensemble, defined as:
+
+            .. math::
+                H = J(XX^T - \Sigma)/ (N_e-1)
+
+            where :math:`X` and :math:`J` are ensemble matrices of :math:`x` (or control variables) and objective function
+            perturbed by their respective means.
+
+            Note: state and ens_func_values are assumed to already exist from computation of the gradient.
+            Save time by not running them again.
+
+            Parameters
+            ----------
+            x : ndarray
+                Control vector, shape (number of controls, number of perturbations)
+
+            Returns
+            -------
+            hessian: numpy.ndarray
+                The hessian evaluated at x, shape (number of controls, number of controls)
+
+            References
+            ----------
+            Zhang, Y., Stordal, A.S. & Lorentzen, R.J. A natural Hessian approximation for ensemble based optimization.
+            Comput Geosci 27, 355–364 (2023). https://doi.org/10.1007/s10596-022-10185-z
+            """
+
     def _org_obs_data(self):
         """
         Organize the input true observed data. The obs_data will be a list of length equal length of "TRUEDATAINDEX",
