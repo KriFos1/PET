@@ -170,12 +170,12 @@ class Ensemble(PETEnsemble):
         Parameters
         ----------
         x : ndarray
-            Control vector, shape (number of controls, number of perturbations)
+            State vector, shape (number of states, number of ensemble members)
 
         Returns
         -------
         obj_func_values : numpy.ndarray
-            Objective function values, shape (number of perturbations, )
+            Objective function values, shape (number of ensemble members, )
         """
 
     def gradient(self, x, *args, **kwargs):
@@ -201,15 +201,15 @@ class Ensemble(PETEnsemble):
            Parameters
            ----------
            x : ndarray
-               Control vector, shape (number of controls, )
+               State vector, shape (number of states, )
 
            args : tuple
-               Covarice (:math:`C_x`), shape (number of controls, number of controls)
+               Covariance (:math:`C_x`), shape (number of states, number of states)
 
            Returns
            -------
            gradient : numpy.ndarray
-                   The gradient evaluated at x, shape (number of controls, )
+                   The gradient evaluated at x, shape (number of states, )
            """
     def hessian(self, x, *args, **kwargs):
         r"""
@@ -218,7 +218,7 @@ class Ensemble(PETEnsemble):
             .. math::
                 H = J(XX^T - \Sigma)/ (N_e-1)
 
-            where :math:`X` and :math:`J` are ensemble matrices of :math:`x` (or control variables) and objective function
+            where :math:`X` and :math:`J` are ensemble matrices of :math:`x` (or states) and objective function
             perturbed by their respective means.
 
             Note: state and ens_func_values are assumed to already exist from computation of the gradient.
