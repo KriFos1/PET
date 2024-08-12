@@ -3,7 +3,8 @@
 import numpy as np
 from copy import deepcopy
 import copy as cp
-from scipy.linalg import solve, solve_banded, cholesky, lu_solve, lu_factor, inv
+#from scipy.linalg import solve, solve_banded, cholesky, lu_solve, lu_factor, inv
+from utils.common import solve_linear
 import pickle
 import pipt.misc_tools.analysis_tools as at
 
@@ -32,9 +33,9 @@ class full_update():
             x_1 = np.dot(u_d.T, np.dot(np.expand_dims(self.scale_data ** (-1), axis=1), np.ones((1, self.ne))) *
                          (self.real_obs_data - self.aug_pred_data))
         else:
-            x_1 = np.dot(u_d.T, solve(self.scale_data,
+            x_1 = np.dot(u_d.T, solve_linear(self.scale_data,
                          (self.real_obs_data - self.aug_pred_data)))
-        x_2 = solve(((self.lam + 1) * np.eye(len(s_d)) + np.diag(s_d ** 2)), x_1)
+        x_2 = solve_linear(((self.lam + 1) * np.ones(len(s_d)) + (s_d ** 2)), x_1)
         x_3 = np.dot(np.dot(v_d.T, np.diag(s_d)), x_2)
         delta_m1 = np.dot((self.state_scaling[:, None]*delta_state), x_3)
 
@@ -42,8 +43,8 @@ class full_update():
                      [:, None]*(aug_state - aug_prior_state))
         x_5 = np.dot(self.Am, x_4)
         x_6 = np.dot(delta_state.T, x_5)
-        x_7 = np.dot(v_d.T, solve(
-            ((self.lam + 1) * np.eye(len(s_d)) + np.diag(s_d ** 2)), np.dot(v_d, x_6)))
+        x_7 = np.dot(v_d.T, solve_linear(
+            ((self.lam + 1) * np.ones(len(s_d)) + (s_d ** 2)), np.dot(v_d, x_6)))
         delta_m2 = -np.dot((self.state_scaling[:, None]*delta_state), x_7)
 
         self.step = delta_m1 + delta_m2

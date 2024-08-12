@@ -78,12 +78,6 @@ class EnOpt(Optimize):
         # init PETEnsemble
         super(EnOpt, self).__init__(**options)
 
-        def __set__variable(var_name=None, defalut=None):
-            if var_name in options:
-                return options[var_name]
-            else:
-                return defalut
-
         # Set input as class variables
         self.options = options  # options
         self.fun = fun  # objective function
@@ -94,16 +88,16 @@ class EnOpt(Optimize):
         self.mean_state = x  # initial mean state
 
         # Set other optimization parameters
-        self.obj_func_tol = __set__variable('tol', 1e-6)
-        self.alpha = __set__variable('alpha', 0.1)
-        self.alpha_cov = __set__variable('alpha_cov', 0.001)
-        self.beta = __set__variable('beta', 0.0)  # this is stored in the optimizer class
-        self.nesterov = __set__variable('nesterov', False)  # use Nesterov acceleration if value is true
-        self.alpha_iter_max = __set__variable('alpha_maxiter', 5)
-        self.max_resample = __set__variable('resample', 0)
-        self.use_hessian = __set__variable('hessian', False)
-        self.normalize = __set__variable('normalize', True)
-        self.cov_factor = __set__variable('cov_factor', 0.5)
+        self.obj_func_tol = options.get('tol', 1e-6)
+        self.alpha = options.get('alpha', 0.1)
+        self.alpha_cov = options.get('alpha_cov', 0.001)
+        self.beta = options.get('beta', 0.0)  # this is stored in the optimizer class
+        self.nesterov = options.get('nesterov', False)  # use Nesterov acceleration if value is true
+        self.alpha_iter_max = options.get('alpha_maxiter', 5)
+        self.max_resample = options.get('resample', 0)
+        self.use_hessian = options.get('hessian', False)
+        self.normalize = options.get('normalize', True)
+        self.cov_factor = options.get('cov_factor', 0.5)
 
         # Initialize other variables
         self.state_step = 0  # state step
@@ -125,7 +119,7 @@ class EnOpt(Optimize):
                 self.logger.info('       {:<21} {:<15.4e}'.format(self.iteration, np.mean(self.obj_func_values)))
 
         # Initialize optimizer
-        optimizer = __set__variable('optimizer', 'GA')
+        optimizer = options.get('optimizer', 'GA')
         if optimizer == 'GA':
             self.optimizer = opt.GradientAscent(self.alpha, self.beta)
         elif optimizer == 'Adam':

@@ -19,6 +19,7 @@ import utils.read_input_csv as rcsv
 from pipt.misc_tools import wavelet_tools as wt
 from pipt.misc_tools import cov_regularization
 import pipt.misc_tools.analysis_tools as at
+from utils.common import solve_linear
 
 
 class Ensemble(PETEnsemble):
@@ -239,6 +240,167 @@ class Ensemble(PETEnsemble):
             Zhang, Y., Stordal, A.S. & Lorentzen, R.J. A natural Hessian approximation for ensemble based optimization.
             Comput Geosci 27, 355–364 (2023). https://doi.org/10.1007/s10596-022-10185-z
             """
+
+    def levenberg_marquardt(self, x, *args, **kwargs):
+        """
+        Calculate the Levenberg-Marquardt update using the approximate form as described in
+         "Chen, Y., & Oliver, D. S. (2013). Levenberg–Marquardt forms of the iterative ensemble
+        smoother for efficient history matching and uncertainty quantification. Computational Geosciences, 17(4), 689–703.
+        https://doi.org/10.1007/s10596-013-9351-5"
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector, shape (number of states, ensemble size)
+
+        Returns
+        -------
+        step : numpy.ndarray
+            The update of the state, shape (number of states, ensemble size)
+        """
+        # calc the svd of the scaled and centred matrix of predictions
+        u_d, s_d, v_d = np.linalg.svd(self.pert_preddata, full_matrices=False)
+        # remove the last singular value/vector. This is because numpy returns all ne values, while the last is actually
+        # zero. This part is a good place to include eventual additional truncation.
+        if self.trunc_energy < 1:
+            ti = (np.cumsum(s_d) / sum(s_d)) <= self.trunc_energy
+            u_d, s_d, v_d = u_d[:, ti].copy(), s_d[ti].copy(), v_d[ti, :].copy()
+        if 'localization' in self.keys_da:
+            if 'emp_cov' in self.keys_da and self.keys_da['emp_cov'] == 'yes':
+                E_hat = solve_linear(self.scale_data, self.E)
+                x_0 = np.dot(np.diag(s_d[:] ** (-1)), np.dot(u_d[:, :].T, E_hat))
+                Lam, z = np.linalg.eig(np.dot(x_0, x_0.T))
+                X = np.dot(np.dot(v_d.T, z), solve_linear((self.lam + 1) * Lam + np.ones(len(Lam)),
+                                                   np.dot(u_d[:, :], np.dot(np.diag(s_d[:] ** (-1)).T, z)).T))
+            else:
+                X = np.dot(np.dot(v_d.T, np.diag(s_d)),
+                           solve_linear(((self.lam + 1) * np.ones(len(s_d)) + (s_d ** 2)), u_d.T))
+
+            # we must perform localization
+            # store the size of all data
+            data_size = self.obs_data.shape[0]
+            f = self.keys_da['localization']
+
+            if f[1][0] == 'autoadaloc':
+                scaled_delta_data = solve_linear(
+                    self.scale_data, (self.real_obs_data - self.aug_pred_data))
+
+                step = self.localization.auto_ada_loc(self.state_scaling[:, None] * self.state,
+                                                           np.dot(X, scaled_delta_data),
+                                                           self.list_states,
+                                                           **{'prior_info': self.prior_info})
+            elif 'localanalysis' in self.localization.loc_info and self.localization.loc_info['localanalysis']:
+                if 'distance' in self.localization.loc_info:
+                    from pipt.misc_tools.cov_regularization import _calc_loc
+                    weight = _calc_loc(self.localization.loc_info['range'], self.localization.loc_info['distance'],
+                                       self.prior_info[self.list_states[0]], self.localization.loc_info['type'],
+                                       self.ne)
+                else:
+                    # if no distance, do full update
+                    weight = np.ones((self.state.shape[0], X.shape[1]))
+                scaled_delta_data = solve_linear(
+                        self.scale_data, (self.real_obs_data - self.aug_pred_data))
+                try:
+                    step = weight.multiply(
+                        np.dot(self.state, X)).dot(scaled_delta_data)
+                except:
+                    step = (weight * (np.dot(self.state, X))).dot(scaled_delta_data)
+
+            elif sum(['dist_loc' in el for el in f]) >= 1:
+                local_mask = self.localization.localize(self.list_datatypes,
+                                                        [self.keys_da['truedataindex'][int(elem)]
+                                                         for elem in self.assim_index[1]],
+                                                        self.list_states, self.ne, self.prior_info, data_size)
+                scaled_delta_data = solve_linear(
+                    self.scale_data, (self.real_obs_data - self.aug_pred_data))
+
+                step = local_mask.multiply(
+                    np.dot(self.state, X)).dot(scaled_delta_data)
+            else:
+                #todo:
+                # re-implement this part of the code. This is the row-wise updates, as demonstrated by Emerick with
+                # distance based localization.
+                act_data_list = {}
+                count = 0
+                for i in self.assim_index[1]:
+                    for el in self.list_datatypes:
+                        if self.real_obs_data[int(i)][el] is not None:
+                            act_data_list[(
+                                el, float(self.keys_da['truedataindex'][int(i)]))] = count
+                            count += 1
+
+                well = [w for w in
+                        set([el[0] for el in self.localization.loc_info.keys() if type(el) == tuple])]
+                times = [t for t in set(
+                    [el[1] for el in self.localization.loc_info.keys() if type(el) == tuple])]
+                tot_dat_index = {}
+                for uniq_well in well:
+                    tmp_index = []
+                    for t in times:
+                        if (uniq_well, t) in act_data_list:
+                            tmp_index.append(act_data_list[(uniq_well, t)])
+                    tot_dat_index[uniq_well] = tmp_index
+                if 'emp_cov' in self.keys_da and self.keys_da['emp_cov'] == 'yes':
+                    emp_cov = True
+                else:
+                    emp_cov = False
+
+                step = at.parallel_upd(self.list_states, self.prior_info, self.current_state, X,
+                                            self.localization.loc_info, self.real_obs_data, self.aug_pred_data,
+                                            int(self.keys_fwd['parallel']),
+                                            actnum=self.localization.loc_info['actnum'],
+                                            field_dim=self.localization.loc_info['field'],
+                                            act_data_list=tot_dat_index,
+                                            scale_data=self.scale_data,
+                                            num_states=len(
+                                                [el for el in self.list_states]),
+                                            emp_d_cov=emp_cov)
+                step = at.aug_state(self.step, self.list_states)
+
+        else:
+            # Mean state and perturbation matrix
+            mean_state = np.mean(aug_state, 1)
+            if 'emp_cov' in self.keys_da and self.keys_da['emp_cov'] == 'yes':
+                pert_state = (self.state_scaling ** (-1))[:, None] * (
+                            aug_state - np.dot(np.resize(mean_state, (len(mean_state), 1)),
+                                               np.ones((1, self.ne))))
+            else:
+                pert_state = (self.state_scaling ** (-1)
+                              )[:, None] * np.dot(aug_state, self.proj)
+            if 'emp_cov' in self.keys_da and self.keys_da['emp_cov'] == 'yes':
+                if len(self.scale_data.shape) == 1:
+                    E_hat = np.dot(np.expand_dims(self.scale_data ** (-1),
+                                                  axis=1), np.ones((1, self.ne))) * self.E
+                    x_0 = np.dot(np.diag(s_d[:] ** (-1)), np.dot(u_d[:, :].T, E_hat))
+                    Lam, z = np.linalg.eig(np.dot(x_0, x_0.T))
+                    x_1 = np.dot(np.dot(u_d[:, :], np.dot(np.diag(s_d[:] ** (-1)).T, z)).T,
+                                 np.dot(np.expand_dims(self.scale_data ** (-1), axis=1), np.ones((1, self.ne))) *
+                                 (self.real_obs_data - self.aug_pred_data))
+                else:
+                    E_hat = solve(self.scale_data, self.E)
+                    x_0 = np.dot(np.diag(s_d[:] ** (-1)), np.dot(u_d[:, :].T, E_hat))
+                    Lam, z = np.linalg.eig(np.dot(x_0, x_0.T))
+                    x_1 = np.dot(np.dot(u_d[:, :], np.dot(np.diag(s_d[:] ** (-1)).T, z)).T,
+                                 solve(self.scale_data, (self.real_obs_data - self.aug_pred_data)))
+
+                x_2 = solve((self.lam + 1) * np.diag(Lam) + np.eye(len(Lam)), x_1)
+                x_3 = np.dot(np.dot(v_d.T, z), x_2)
+                delta_1 = np.dot(self.state_scaling[:, None] * pert_state, x_3)
+                step = delta_1
+            else:
+                # Compute the approximate update (follow notation in paper)
+                if len(self.scale_data.shape) == 1:
+                    x_1 = np.dot(u_d.T,
+                                 np.dot(np.expand_dims(self.scale_data ** (-1), axis=1), np.ones((1, self.ne))) *
+                                 (self.real_obs_data - self.aug_pred_data))
+                else:
+                    x_1 = np.dot(u_d.T, solve(self.scale_data,
+                                              (self.real_obs_data - self.aug_pred_data)))
+                x_2 = solve(((self.lam + 1) * np.eye(len(s_d)) + np.diag(s_d ** 2)), x_1)
+                x_3 = np.dot(np.dot(v_d.T, np.diag(s_d)), x_2)
+                step = np.dot(self.state_scaling[:, None] * pert_state, x_3)
+
+        return step
 
     def _org_obs_data(self):
         """
