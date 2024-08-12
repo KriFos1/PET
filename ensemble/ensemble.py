@@ -20,13 +20,13 @@ from geostat.decomp import Cholesky  # Making realizations
 # Internal imports
 from pipt.misc_tools import cov_regularization
 from pipt.misc_tools import wavelet_tools as wt
-from misc import read_input_csv as rcsv
-from misc.system_tools.environ_var import OpenBlasSingleThread  # Single threaded OpenBLAS runs
+from utils import read_input_csv as rcsv
+from utils.system_tools.environ_var import OpenBlasSingleThread  # Single threaded OpenBLAS runs
 
 
 class Ensemble:
     """
-    Class for organizing misc. variables and simulator for an ensemble-based inversion run. Here, the forecast step
+    Class for organizing utils. variables and simulator for an ensemble-based inversion run. Here, the forecast step
     and prediction runs are performed. General methods that are useful in various ensemble loops have also been
     implemented here.
     """

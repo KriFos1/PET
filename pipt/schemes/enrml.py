@@ -3,13 +3,14 @@ import numpy as np
 import time
 import pprint
 from scipy.linalg import solve
+
 # internal imports
 from pipt.loop.assimilation import Assimilate
-from pipt.misc_tools import assimilation_tools as at
+from pipt.misc_tools import analysis_tools as at
 
 
-class EnRML(assimilation):
-    def __init__(self, fun, x, args, jac, hess, method='LM', bounds=None, **options):
+class EnRML(Assimilate):
+    def __init__(self, fun, x, args, kalmangain, bounds=None, **options):
         """
         Parameters
         ----------
@@ -19,10 +20,8 @@ class EnRML(assimilation):
             Initial guess
         args: tuple
             Arguments to pass to the objective function
-        jac: callable
-            Jacobian of the objective function
-        hess: callable
-            Hessian of the objective function
+        kalmangain: callable
+            Gain matrix to be applied.
         method: str
             Method for optimization. Default is 'Levenberg-Marquardt'
         bounds: list
@@ -44,9 +43,7 @@ class EnRML(assimilation):
         self.fun = fun
         self.x = x
         self.args = args
-        self.jac = jac
-        self.hess = hess
-        self.method = method
+        self.kg = kalmangain
         self.bounds = bounds
 
         # Extract values or set to default
@@ -89,23 +86,20 @@ class EnRML(assimilation):
                 self.lam = (0.5 * self.prior_data_misfit) / self.aug_pred_data.shape[0]
 
             self.logger.info(
-                f'Prior run complete with data misfit: {self.prior_data_misfit:0.1f}. Lambda for initial analysis: {self.lam}')
+                f'Prior run complete with data misfit: {self.prior_data_misfit:0.1f}. '
+                f'Lambda for initial analysis: {self.lam}')
 
         if self.method == 'LM':
-            # select implementation of the update scheme.
-            if self.update_schm == 'approx':
-                # Calculate the LM update step
-                self.step = at.calc_LM_step(
-                    self.aug_pred_data, self.scale_data, self.cov_data, self.lam)
-            elif self.update_schm == 'full':
-                # Calculate the LM update step
-                self.step = at.calc_LM_step_full(
-                    self.aug_pred_data, self.scale_data, self.cov_data, self.lam)
-            else:
-                raise ValueError(f'Update scheme not {self.update_schm} recognized.')
+            #todo:
+            # Evaluate if we should add an option for different update schemes under the LM umbrella.
+            # Example of such schemes are the approximate LM, the full LM, the subspace LM, or perhaps the
+            # Square-root LM.
 
+            self.step = at.calc_LM_step(self.aug_pred_data, self.scale_data, self.cov_data, self.lam)
+            self.state = self.current_state + self.step
         elif self.method == 'GN':
-        #
+            self.step = at.calc_GN_step(self.aug_pred_data, self.scale_data, self.cov_data, self.lam)
+            self.state = self.current_state + self.gamma*self.step
         else:
             raise ValueError(f'Update method not {self.method} recognized.')
 

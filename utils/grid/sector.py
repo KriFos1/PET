@@ -8,8 +8,8 @@ import numpy
 import re
 import sys
 
-import misc.grid as pyr
-import misc.grdecl as grdecl
+import utils.grid as pyr
+import utils.grdecl as grdecl
 
 
 # add a valid log in case we are not run through the main program which

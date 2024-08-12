@@ -26,14 +26,14 @@ def read_grid(filename, cache_dir=None):
     base, ext = pth.splitext(fullname)
 
     if ext.lower() == '.grdecl':
-        from misc import grdecl as grdecl
+        from utils import grdecl as grdecl
         log.info("Reading corner point grid from \"%s\"", fullname)
         grid = grdecl.read(fullname)
 
     elif ext.lower() == '.egrid':
         # in case we only have a simulation available, with the binary
         # output from the restart, we can read this directly
-        from misc import ecl as ecl
+        from utils import ecl as ecl
         log.info("Reading binary Eclipse grid from \"%s\"", fullname)
         egrid = ecl.EclipseGrid(base)
         grid = {'DIMENS': egrid.shape[::-1],

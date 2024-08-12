@@ -6,7 +6,7 @@ import shutil
 
 # Internal imports
 from simulator.eclipse import eclipse
-from misc.system_tools.environ_var import OPMRunEnvironment
+from utils.system_tools.environ_var import OPMRunEnvironment
 
 
 class flow(eclipse):

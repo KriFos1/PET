@@ -10,13 +10,13 @@ from multiprocessing import Process
 import datetime as dt
 from scipy import interpolate
 from subprocess import call, DEVNULL
-from misc import ecl, grdecl
+from utils import ecl, grdecl
 from shutil import rmtree, copytree  # rmtree for removing folders
 import time
 # import rips
 
 # Internal imports
-from misc.system_tools.environ_var import EclipseRunEnvironment
+from utils.system_tools.environ_var import EclipseRunEnvironment
 from pipt.misc_tools.analysis_tools import store_ensemble_sim_information
 
 

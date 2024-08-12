@@ -15,7 +15,7 @@ from geostat.decomp import Cholesky
 
 # Internal import
 from ensemble.ensemble import Ensemble as PETEnsemble
-import misc.read_input_csv as rcsv
+import utils.read_input_csv as rcsv
 from pipt.misc_tools import wavelet_tools as wt
 from pipt.misc_tools import cov_regularization
 import pipt.misc_tools.analysis_tools as at
@@ -23,7 +23,7 @@ import pipt.misc_tools.analysis_tools as at
 
 class Ensemble(PETEnsemble):
     """
-    Class for organizing/initializing misc. variables and simulator for an
+    Class for organizing/initializing utils. variables and simulator for an
     ensemble-based inversion run. Inherits the PET ensemble structure
     """
 

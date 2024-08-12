@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='PET',
     version='1.0',
-    packages=['pipt', 'popt', 'ensemble', 'simulator', 'input_output', 'misc'],
+    packages=['pipt', 'popt', 'ensemble', 'simulator', 'input_output', 'utils'],
     url='https://github.com/Python-Ensemble-Toolbox/PET',
     license_files=('LICENSE.txt',),
     author='',
