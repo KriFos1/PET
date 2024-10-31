@@ -4,6 +4,96 @@ File for reading CSV files and returning a 2D list
 import pandas as pd
 import numpy as np
 
+def read_data_df(filename, datatype=None, truedataindex=None, outtype='np.array',return_data_info=True):
+    """
+    Parameters
+    ----------
+    filename : str
+        Name of the pickled file.
+
+    datatype : list, optional
+        List of data types as strings. Default is None.
+
+    truedataindex : list, optional
+        List of indices for assimilation. Default is None.
+
+    outtype : str, optional
+        Type of output data. Default is 'np.array'.
+
+    Returns
+    -------
+    flat_array : flat numpy array containing all the data. This is returned if outtype is 'np.array'.
+    data : list of dictionaries with keys equal to column names. This is returned if outtype is 'list'.
+
+    If return_data_info is True, the function will also return the data keys and the data info (column names and index).
+    """
+
+        # Custom function to handle strings with space-separated numbers and convert them back to NumPy arrays
+    def convert_to_array(array_str):
+        try:
+            # Remove any unwanted characters like square brackets and split by space
+            cleaned_str = array_str.replace('[', '').replace(']', '').strip()
+            # Split the string by spaces and convert the result to a NumPy array of floats
+            return np.array([float(x) for x in cleaned_str.split()])
+        except ValueError:
+            # If the string cannot be converted, return it as is (error handling)
+            return array_str
+
+    # read the file
+    df = pd.read_csv(filename, index_col=0)
+    # convert the string representation of arrays back to NumPy arrays
+    for col in df.columns:
+        df[col] = df[col].apply(convert_to_array)
+
+    if outtype == 'np.array': # vectorize data
+        if datatype is not None:
+            if truedataindex is not None:
+                flat_array = np.concatenate([np.concatenate([df.iloc[ti][col] if isinstance(df.iloc[ti][col], np.ndarray) else
+                                                             np.array([df.iloc[ti][col]])
+                                                            for col in datatype]) for ti in truedataindex])
+                if return_data_info:
+                    flat_array, list(datatype), [df.index[el] for el in truedataindex]
+            else:
+                flat_array = np.concatenate([np.concatenate([row[col] if isinstance(row[col], np.ndarray) else
+                                                             np.array([row[col]])
+                                                for col in datatype]) for _, row in df.iterrows()])
+                if return_data_info:
+                    flat_array, list(datatype), list(df.index)
+        else:
+            if truedataindex is not None:
+                flat_array = np.concatenate([np.concatenate([df.iloc[ti][col] if isinstance(df.iloc[ti][col], np.ndarray) else
+                                                             np.array([df.iloc[ti][col]])
+                                                            for col in df.columns]) for ti in truedataindex])
+                if return_data_info:
+                    flat_array, list(df.columns), [df.index[el] for el in truedataindex]
+            else:
+                flat_array = np.concatenate([np.concatenate([row[col] if isinstance(row[col], np.ndarray) else np.array([row[col]])
+                                for col in df.columns]) for _, row in df.iterrows()])
+                if return_data_info:
+                    return flat_array, list(df.columns), list(df.index)
+
+        return flat_array
+
+    elif outtype == 'list': # return data as a list over row indices. Where each list element is a dictionary with keys equal to column names
+        if datatype is not None:
+            if truedataindex is not None:
+                data = [{col: df.iloc[ti][col] for col in datatype} for ti in truedataindex]
+                if return_data_info:
+                    data, list(datatype), [df.index[el] for el in truedataindex]
+            else:
+                data = [{col: row[col] for col in datatype} for _, row in df.iterrows()]
+                if return_data_info:
+                    data, list(datatype), list(df.index)
+        else:
+            if truedataindex is not None:
+                data = [{col: df.iloc[ti][col] for col in df.columns} for ti in truedataindex]
+                if return_data_info:
+                    data, list(datatype), list(df.index)
+            else:
+                data = [{col: row[col] for col in df.columns} for _, row in df.iterrows()]
+                if return_data_info:
+                    return data, list(df.columns), list(df.index)
+        return data
 
 def read_data_csv(filename, datatype, truedataindex):
     """

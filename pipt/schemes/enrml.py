@@ -61,38 +61,45 @@ class EnRML(Assimilate):
         # The EnOpt class self-ignites, and it is possible to send the EnOpt class as a callale method to scipy.minimize
         self.run_loop()  # run_loop resides in the Optimization class (super)
 
-    def calc_update(self):
-        """
-        Calculate the update step in LM-EnRML, which is just the Levenberg-Marquardt update algorithm with
-        the sensitivity matrix approximated by the ensemble.
-        """
+def calc_update(self):
+    """
+    Calculate the update step for EnRML, which is just the Levenberg-Marquardt update algorithm with
+    the sensitivity matrix approximated by the ensemble.
+    """
 
-        if self.iteration == 1:  # first iteration
-            data_misfit = at.calc_objectivefun(
-                self.real_obs_data, self.aug_pred_data, self.cov_data)
+    if self.iteration == 1:  # first iteration
+        # Calculate the data misfit using the objective function
+        data_misfit = at.calc_objectivefun(
+            self.real_obs_data, self.aug_pred_data, self.cov_data)
 
-            # Store the (mean) data misfit (also for conv. check)
-            self.data_misfit = np.mean(data_misfit)
-            self.prior_data_misfit = np.mean(data_misfit)
-            self.data_misfit_std = np.std(data_misfit)
+        # Store the (mean) data misfit (also for convergence check)
+        self.data_misfit = np.mean(data_misfit)
+        self.prior_data_misfit = np.mean(data_misfit)
+        self.data_misfit_std = np.std(data_misfit)
 
-            if self.lam == 'auto':
-                self.lam = (0.5 * self.prior_data_misfit) / self.aug_pred_data.shape[0]
+        # Set lambda for initial analysis if it is set to 'auto'
+        if self.lam == 'auto':
+            self.lam = (0.5 * self.prior_data_misfit) / self.aug_pred_data.shape[0]
 
-            self.logger.info(
-                f'Prior run complete with data misfit: {self.prior_data_misfit:0.1f}. '
-                f'Lambda for initial analysis: {self.lam}')
+        # Log the prior run completion and initial lambda value
+        self.logger.info(
+            f'Prior run complete with data misfit: {self.prior_data_misfit:0.1f}. '
+            f'Lambda for initial analysis: {self.lam}')
+    else:
+        # Mean pred_data and perturbation matrix with scaling
+        if len(self.scale_data.shape) == 1:
+            # Calculate perturbation data for 1D scale data
+            self.pert_preddata = np.dot(np.expand_dims(self.scale_data ** (-1), axis=1),
+                                        np.ones((1, self.ne))) * np.dot(self.aug_pred_data, self.proj)
         else:
-            # Mean pred_data and perturbation matrix with scaling
-            if len(self.scale_data.shape) == 1:
-                self.pert_preddata = np.dot(np.expand_dims(self.scale_data ** (-1), axis=1),
-                                            np.ones((1, self.ne))) * np.dot(self.aug_pred_data, self.proj)
-            else:
-                self.pert_preddata = solve(
-                    self.scale_data, np.dot(self.aug_pred_data, self.proj))
+            # Calculate perturbation data for multi-dimensional scale data
+            self.pert_preddata = solve(
+                self.scale_data, np.dot(self.aug_pred_data, self.proj))
 
-            step = self.kg(self.aug_pred_data, self.scale_data, self.proj, self.lam)
+        # Calculate the update step using the Kalman gain
+        step = self.kg(self.aug_pred_data, self.scale_data, self.proj, self.lam)
 
-            # Extract updated state variables from aug_update
-            self.state = self.state + step
-            self.state = at.limits(self.state, self.bounds)
+        # Extract updated state variables from the update step
+        self.state = self.state + step
+        # Apply limits to the state variables
+        self.state = at.limits(self.state, self.bounds)

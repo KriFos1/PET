@@ -554,7 +554,7 @@ class Ensemble:
             list_member_index = list(range(self.ne))
 
             if no_tot_run==1: # if not in parallel we use regular loop
-                en_pred = [self.sim.run_fwd_sim(state, member_index) for state, member_index in
+                en_pred = [deepcopy(self.sim.run_fwd_sim(state, member_index)) for state, member_index in
                            tqdm(zip(list_state, list_member_index), total=len(list_state))]
             else: # Run prediction in parallel using p_map
                 en_pred = p_map(self.sim.run_fwd_sim, list_state,
