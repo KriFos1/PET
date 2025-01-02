@@ -664,6 +664,9 @@ class Ensemble(PETEnsemble):
         #  extracted from the csv file
         if isinstance(self.keys_da['datavar'], str) and self.keys_da['datavar'].endswith('.csv'):
             datavar = rcsv.read_var_csv(self.keys_da['datavar'], datatype, true_prim)
+        if isinstance(self.keys_da['datavar'], str) and self.keys_da['datavar'].endswith('.pkl'):
+            datavar = rcsv.read_var_df(self.keys_da['datavar'], datatype=self.keys_da['datatype'],
+                                       truedataindex=self.keys_da['truedataindex'])
 
         # Initialize datavar output
         self.datavar = [None] * len(true_prim)
@@ -676,61 +679,73 @@ class Ensemble(PETEnsemble):
             # Init. dict. with datatypes (do inside loop to avoid copy of same entry)
             self.datavar[i] = {}
             for j in range(len(datatype)):  # DATATYPE
+                if self.obs_data[i][datatype[j]] is not None:
+                    self.datavar[i][datatype[j]] = []
+                    for c,el in enumerate(self.obs_data[i][datatype[j]]):
+                        if datavar[i][datatype[j]][c][0].lower() == 'rel':
+                            self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][c][1]*(el*0.01))**2)
+                        elif datavar[i][datatype[j]][c][0].lower() == 'abs':
+                            self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][c][1])
+                        else:
+                            sys.exit()
+                    self.datavar[i][datatype[j]] = np.array(self.datavar[i][datatype[j]])
+                else:
+                    self.datavar[i][datatype[j]] = None
                 # ABS
                 # Absolute var.
-                if datavar[i][2*j] == 'abs' and self.obs_data[i][datatype[j]] is not None:
-                    self.datavar[i][datatype[j]] = datavar[i][2*j+1] * \
-                        np.ones(len(self.obs_data[i][datatype[j]]))
-
-                # REL
-                # Rel. var.
-                elif datavar[i][2*j] == 'rel' and self.obs_data[i][datatype[j]] is not None:
-                    # Rel. var WITH a min. variance tolerance
-                    if isinstance(datavar[i][2*j+1], list):
-                        self.datavar[i][datatype[j]] = (datavar[i][2*j+1][0] * 0.01 *
-                                                        self.obs_data[i][datatype[j]]) ** 2
-                        ind_tol = self.datavar[i][datatype[j]] < datavar[i][2*j+1][1] ** 2
-                        self.datavar[i][datatype[j]][ind_tol] = datavar[i][2*j+1][1] ** 2
-
-                    else:  # Single. rel. var input
-                        var = (datavar[i][2*j+1] * 0.01 * self.obs_data[i][datatype[j]]) ** 2
-                        var = np.clip(var, 1.0e-9, None)  # avoid zero variance
-                        self.datavar[i][datatype[j]] = var
-                # EMP
-                elif datavar[i][2*j] == 'emp' and datavar[i][2*j+1].endswith('.npz') and \
-                        self.obs_data[i][datatype[j]] is not None:  # Empirical var.
-                    load_data = np.load(datavar[i][2*j+1])  # load the numpy savez file
-                    # store in datavar
-                    self.datavar[i][datatype[j]] = load_data[load_data.files[0]]
-
-                # LOAD
-                elif datavar[i][2*j] == 'load' and datavar[i][2*j+1].endswith('.npz') and \
-                        self.obs_data[i][datatype[j]] is not None:  # Load variance. (1d array)
-                    load_data = np.load(datavar[i][2*j+1])  # load the numpy savez file
-                    load_data = load_data[load_data.files[0]]
-                    self.datavar[i][datatype[j]] = load_data  # store in datavar
-
-                # CD the full covariance matrix is given in its correct format. Hence, load once and set as CD
-                elif datavar[i][2 * j] == 'cd' and datavar[i][2 * j + 1].endswith('.npz') and \
-                        self.obs_data[i][datatype[j]] is not None:
-                    if not hasattr(self, 'cov_data'):  # check to populate once
-                        # load the numpy savez file
-                        load_data = np.load(datavar[i][2 * j + 1])
-                        self.cov_data = load_data[load_data.files[0]]
-                    # store the variance
-                    self.datavar[i][datatype[j]] = self.cov_data[i*j, i*j]
-
-                elif self.obs_data[i][datatype[j]] is None:  # No observed data
-                    self.datavar[i][datatype[j]] = None  # Set None type here also
-
-                # Handle case when noise is estimated using wavelets
-                if self.sparse_info is not None and self.datavar[i][datatype[j]] is not None and \
-                        vintage < len(self.sparse_info['mask']) and \
-                        len(self.datavar[i][datatype[j]]) == int(np.sum(self.sparse_info['mask'][vintage])):
-                    # compute var from sparse_data
-                    est_noise = np.power(self.sparse_data[vintage].est_noise, 2)
-                    self.datavar[i][datatype[j]] = est_noise  # override the given value
-                    vintage = vintage + 1
+                # if datavar[i][2*j] == 'abs' and self.obs_data[i][datatype[j]] is not None:
+                #     self.datavar[i][datatype[j]] = datavar[i][2*j+1] * \
+                #         np.ones(len(self.obs_data[i][datatype[j]]))
+                #
+                # # REL
+                # # Rel. var.
+                # elif datavar[i][2*j] == 'rel' and self.obs_data[i][datatype[j]] is not None:
+                #     # Rel. var WITH a min. variance tolerance
+                #     if isinstance(datavar[i][2*j+1], list):
+                #         self.datavar[i][datatype[j]] = (datavar[i][2*j+1][0] * 0.01 *
+                #                                         self.obs_data[i][datatype[j]]) ** 2
+                #         ind_tol = self.datavar[i][datatype[j]] < datavar[i][2*j+1][1] ** 2
+                #         self.datavar[i][datatype[j]][ind_tol] = datavar[i][2*j+1][1] ** 2
+                #
+                #     else:  # Single. rel. var input
+                #         var = (datavar[i][2*j+1] * 0.01 * self.obs_data[i][datatype[j]]) ** 2
+                #         var = np.clip(var, 1.0e-9, None)  # avoid zero variance
+                #         self.datavar[i][datatype[j]] = var
+                # # EMP
+                # elif datavar[i][2*j] == 'emp' and datavar[i][2*j+1].endswith('.npz') and \
+                #         self.obs_data[i][datatype[j]] is not None:  # Empirical var.
+                #     load_data = np.load(datavar[i][2*j+1])  # load the numpy savez file
+                #     # store in datavar
+                #     self.datavar[i][datatype[j]] = load_data[load_data.files[0]]
+                #
+                # # LOAD
+                # elif datavar[i][2*j] == 'load' and datavar[i][2*j+1].endswith('.npz') and \
+                #         self.obs_data[i][datatype[j]] is not None:  # Load variance. (1d array)
+                #     load_data = np.load(datavar[i][2*j+1])  # load the numpy savez file
+                #     load_data = load_data[load_data.files[0]]
+                #     self.datavar[i][datatype[j]] = load_data  # store in datavar
+                #
+                # # CD the full covariance matrix is given in its correct format. Hence, load once and set as CD
+                # elif datavar[i][2 * j] == 'cd' and datavar[i][2 * j + 1].endswith('.npz') and \
+                #         self.obs_data[i][datatype[j]] is not None:
+                #     if not hasattr(self, 'cov_data'):  # check to populate once
+                #         # load the numpy savez file
+                #         load_data = np.load(datavar[i][2 * j + 1])
+                #         self.cov_data = load_data[load_data.files[0]]
+                #     # store the variance
+                #     self.datavar[i][datatype[j]] = self.cov_data[i*j, i*j]
+                #
+                # elif self.obs_data[i][datatype[j]] is None:  # No observed data
+                #     self.datavar[i][datatype[j]] = None  # Set None type here also
+                #
+                # # Handle case when noise is estimated using wavelets
+                # if self.sparse_info is not None and self.datavar[i][datatype[j]] is not None and \
+                #         vintage < len(self.sparse_info['mask']) and \
+                #         len(self.datavar[i][datatype[j]]) == int(np.sum(self.sparse_info['mask'][vintage])):
+                #     # compute var from sparse_data
+                #     est_noise = np.power(self.sparse_data[vintage].est_noise, 2)
+                #     self.datavar[i][datatype[j]] = est_noise  # override the given value
+                #     vintage = vintage + 1
 
     def _org_sparse_representation(self):
         """
