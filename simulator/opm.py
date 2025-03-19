@@ -1,6 +1,6 @@
 """Wrap OPM-flow"""
 # External imports
-from subprocess import call, DEVNULL
+from subprocess import call, DEVNULL, run
 import os
 import shutil
 
@@ -14,6 +14,13 @@ class flow(eclipse):
     Class for running OPM flow with Eclipse input files. Inherits eclipse parent class for setting up and running
     simulations, and reading the results.
     """
+
+    def __init__(self,input_file=None,initialize_parent=True):
+        if initialize_parent:
+            super().__init__(input_file)
+        else:
+            self.file = input_file['filename']
+            self.options = None
 
     def call_sim(self, folder=None, wait_for_proc=False):
         """
@@ -84,6 +91,56 @@ class flow(eclipse):
 
         return finished_member
 
+    @staticmethod
+    def SLURM_HPC_run(num_runs, filename=None):
+        """
+        HPC run manager for SLURM.
+
+        This function will start num_runs of sim.call_sim() using job arrays in SLURM.
+        """
+        filename_str = f'"{filename}"' if filename is not None else ""
+
+        slurm_script = f"""\                                                                                  
+    #!/bin/bash                                                                                               
+    #SBATCH --partition=comp                                                                                  
+    #SBATCH --job-name=test_mpi                                                                               
+    #SBATCH --array=0-{num_runs - 1}                                                                            
+    #SBATCH --time=01:00:00                                                                                   
+    #SBATCH --mem=4G                                                                                          
+    #SBATCH --cpus-per-task=1                                                                                 
+    #SBATCH --export=ALL                                                                                      
+    #SBATCH --output=/dev/null                                                                                
+    #SBATCH --error=errors.log                                                                                
+
+    # OPTIONAL: load modules here                                                                             
+    module load Python                                                                                        
+    export LMOD_DISABLE_SAME_NAME_AUTOSWAP=no                                                                 
+    module load opm-simulators                                                                                
+
+    source ../../../code/venv/bin/activate                                                                    
+
+    # Set folder based on SLURM_ARRAY_TASK_ID
+    folder="En_${{SLURM_ARRAY_TASK_ID}}"
+                                          
+    python simulator/opm.py "$folder" {filename_str}                                              
+    """
+        script_name = "submit_test_parallel_mpi.sh"
+        with open(script_name, "w") as f:
+            f.write(slurm_script)
+
+        # Make it executable (optional):
+        os.chmod(script_name, 0o755)
+
+        #    print(f"Created SLURM script: {script_name}")
+        #    print(f"Submitting array job with {num_runs} tasks...")
+
+        # Submit the script to SLURM
+        cmd = ["sbatch", script_name]
+        run(cmd, capture_output=True, text=True)
+
+        # remove the sh file
+        os.remove(script_name)
+
 
 class ebos(eclipse):
     """
@@ -144,3 +201,16 @@ class ebos(eclipse):
         #                     member = finished_member
 
         return finished_member
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python opm.py <folder> <filename>")
+        sys.exit(1)
+
+    folder = sys.argv[1]
+    filename = sys.argv[2]
+    sim = flow(input_file={'filename': filename},initialize_parent=False)
+    success = sim.call_sim(folder=folder)
+    #print("Success!" if success else "Failed.")

@@ -556,6 +556,16 @@ class Ensemble:
             if no_tot_run==1: # if not in parallel we use regular loop
                 en_pred = [self.sim.run_fwd_sim(state, member_index) for state, member_index in
                            tqdm(zip(list_state, list_member_index), total=len(list_state))]
+            elif self.sim.input_dict.get('hpc', False): # Run prediction in parallel on hpc
+                _ = [self.sim.run_fwd_sim(state, member_index,nosim=True) for state, member_index in
+                           zip(list_state, list_member_index)]
+                # Run call_sim on the hpc
+                self.sim.SLURM_HPC_run(self.ne, filename=self.sim.input_dict['runfile'])
+                # Wait for the simulations to finish
+                sys.exit()
+                # Extract the results
+                en_pred = [self.sim.self.extract_data(member_i) for member_i in list_member_index]
+
             else: # Run prediction in parallel using p_map
                 en_pred = p_map(self.sim.run_fwd_sim, list_state,
                                 list_member_index, num_cpus=no_tot_run, disable=self.disable_tqdm)
