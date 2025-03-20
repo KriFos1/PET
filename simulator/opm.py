@@ -155,7 +155,7 @@ python -m simulator.opm "$folder" {filename_str}
         """Check if all job array tasks are completed using sacct."""
         check_cmd = ["sacct", "-j", job_id, "--format=JobID,State", "--noheader"]
         check_result = run(check_cmd, capture_output=True, text=True)
-
+        print(check_result.stdout)
         job_states = check_result.stdout.strip().split("\n")
         for job in job_states:
             parts = job.split()
