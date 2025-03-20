@@ -836,8 +836,6 @@ class eclipse:
         # Check that we have no trailing spaces
         whichResponse = whichResponse.strip()
 
-        print(glob('En_' + str(member) + os.sep + '*'))
-
         # if ensemble DA method
         if member is not None:
             # Get results

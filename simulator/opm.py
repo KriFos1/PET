@@ -105,7 +105,7 @@ class flow(eclipse):
 
         slurm_script = f"""#!/bin/bash                                                                                               
 #SBATCH --partition=comp                                                                                  
-#SBATCH --job-name=test_mpi                                                                               
+#SBATCH --job-name=EnDA                                                                               
 #SBATCH --array=0-{num_runs - 1}                                                                            
 #SBATCH --time=01:00:00                                                                                   
 #SBATCH --mem=4G                                                                                          
@@ -153,9 +153,18 @@ python -m simulator.opm "$folder" {filename_str}
 
     def are_jobs_done(self,job_id):
         """Check if all job array tasks are completed using sacct."""
-        check_cmd = ["sacct", "-j", job_id, "--format=JobID,State", "--noheader"]
+        check_cmd = ["sacct", "-j", f"{job_id}", "--format=JobID,State", "--noheader"]
+
+#        print(check_cmd)
+
         check_result = run(check_cmd, capture_output=True, text=True)
-        print(check_result.stdout)
+
+        while not len(check_result.stdout): # if spinning up
+            time.sleep(1)
+            check_result = run(check_cmd, capture_output=True, text=True)
+
+#        print(check_result.stdout)
+
         job_states = check_result.stdout.strip().split("\n")
         for job in job_states:
             parts = job.split()
@@ -167,12 +176,12 @@ python -m simulator.opm "$folder" {filename_str}
     
     def wait_for_jobs(self,job_id,wait_time=10):
         """Wait until all job array tasks are completed."""
-        print(f"Waiting for job array {job_id} to complete...")
+        #print(f"Waiting for job array {job_id} to complete...")
 
         while not self.are_jobs_done(job_id):
             time.sleep(wait_time)  # Wait for 10 seconds before checking again
 
-        print(f"All jobs in array {job_id} are completed.")
+        #print(f"All jobs in array {job_id} are completed.")
 
     
 
