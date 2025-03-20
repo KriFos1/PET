@@ -14,6 +14,7 @@ from misc import ecl, grdecl
 from shutil import rmtree, copytree  # rmtree for removing folders
 import time
 # import rips
+from glob import glob
 
 # Internal imports
 from misc.system_tools.environ_var import EclipseRunEnvironment
@@ -834,6 +835,8 @@ class eclipse:
         """
         # Check that we have no trailing spaces
         whichResponse = whichResponse.strip()
+
+        print(glob('En_' + str(member) + os.sep + '*'))
 
         # if ensemble DA method
         if member is not None:

@@ -4,6 +4,7 @@ from subprocess import call, DEVNULL, run
 import os
 import shutil
 import re
+import time
 
 # Internal imports
 from simulator.eclipse import eclipse
