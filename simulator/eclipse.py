@@ -356,6 +356,7 @@ class eclipse:
                         data_array = self.get_sim_results(key, true_data_info, member)
                         self.pred_data[prim_ind][key] = data_array
                     except:
+                        print(f'Failed to extract {key} at {prim_ind} for member {member}')
                         pass
 
     def coarsen(self, folder, ensembleMember=None):
