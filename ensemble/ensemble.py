@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from p_tqdm import p_map
 import logging
 from geostat.decomp import Cholesky  # Making realizations
+import time
 
 # Internal imports
 from pipt.misc_tools import cov_regularization
@@ -560,16 +561,23 @@ class Ensemble:
                 _ = [self.sim.run_fwd_sim(state, member_index,nosim=True) for state, member_index in
                            zip(list_state, list_member_index)]
                 # Run call_sim on the hpc
-                self.sim.SLURM_HPC_run(self.ne, filename=self.sim.input_dict['runfile'])
+                job_id=self.sim.SLURM_HPC_run(self.ne, filename=self.sim.input_dict['runfile'])
                 # Wait for the simulations to finish
-                sys.exit()
+                if job_id:
+                    self.sim.wait_for_jobs(job_id)
+                else:
+                    print("Job submission failed. Exiting.")
                 # Extract the results
-                en_pred = [self.sim.self.extract_data(member_i) for member_i in list_member_index]
+                en_pred = []
+                for member_i in list_member_index:
+                    self.sim.extract_data(member_i)
+                    en_pred.append(deepcopy(self.sim.pred_data))
+                    self.sim.remove_folder(member_i)
 
             else: # Run prediction in parallel using p_map
                 en_pred = p_map(self.sim.run_fwd_sim, list_state,
                                 list_member_index, num_cpus=no_tot_run, disable=self.disable_tqdm)
-
+            print('Forward run complete')
             # List successful runs and crashes
             list_crash = [indx for indx, el in enumerate(en_pred) if el is False]
             list_success = [indx for indx, el in enumerate(en_pred) if el is not False]

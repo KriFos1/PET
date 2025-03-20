@@ -3,6 +3,7 @@
 from subprocess import call, DEVNULL, run
 import os
 import shutil
+import re
 
 # Internal imports
 from simulator.eclipse import eclipse
@@ -20,7 +21,7 @@ class flow(eclipse):
             super().__init__(input_file)
         else:
             self.file = input_file['filename']
-            self.options = None
+            self.options = input_file
 
     def call_sim(self, folder=None, wait_for_proc=False):
         """
@@ -45,6 +46,7 @@ class flow(eclipse):
             filename = self.file
 
         success = True
+        #print(filename)
         try:
             with OPMRunEnvironment(filename, 'PRT', ['End of simulation', 'NOSIM']):
                 com = []
@@ -54,13 +56,13 @@ class flow(eclipse):
                 if self.options['parsing-strictness']:
                     com.extend(['--parsing-strictness=' + self.options['parsing-strictness']])
                 com.extend(['--output-dir=' + folder, *
-                           self.options['sim_flag'].split(), filename + '.DATA'])
+                       self.options['sim_flag'].split(), filename + '.DATA'])
                 if 'sim_limit' in self.options:
                     call(com, stdout=DEVNULL, timeout=self.options['sim_limit'])
                 else:
                     call(com, stdout=DEVNULL)
                 raise ValueError  # catch errors in run_sim
-        except:
+        except Exception as e:
             print('\nError in the OPM run.')  # add rerun?
             if not os.path.exists('Crashdump'):
                 shutil.copytree(folder, 'Crashdump')
@@ -98,32 +100,30 @@ class flow(eclipse):
 
         This function will start num_runs of sim.call_sim() using job arrays in SLURM.
         """
-        filename_str = f'"{filename}"' if filename is not None else ""
+        filename_str = f'"{filename.upper()}"' if filename is not None else ""
 
-        slurm_script = f"""\                                                                                  
-    #!/bin/bash                                                                                               
-    #SBATCH --partition=comp                                                                                  
-    #SBATCH --job-name=test_mpi                                                                               
-    #SBATCH --array=0-{num_runs - 1}                                                                            
-    #SBATCH --time=01:00:00                                                                                   
-    #SBATCH --mem=4G                                                                                          
-    #SBATCH --cpus-per-task=1                                                                                 
-    #SBATCH --export=ALL                                                                                      
-    #SBATCH --output=/dev/null                                                                                
-    #SBATCH --error=errors.log                                                                                
+        slurm_script = f"""#!/bin/bash                                                                                               
+#SBATCH --partition=comp                                                                                  
+#SBATCH --job-name=test_mpi                                                                               
+#SBATCH --array=0-{num_runs - 1}                                                                            
+#SBATCH --time=01:00:00                                                                                   
+#SBATCH --mem=4G                                                                                          
+#SBATCH --cpus-per-task=1                                                                                 
+#SBATCH --export=ALL                                                                                      
+#SBATCH --output=/dev/null                                                                                
 
-    # OPTIONAL: load modules here                                                                             
-    module load Python                                                                                        
-    export LMOD_DISABLE_SAME_NAME_AUTOSWAP=no                                                                 
-    module load opm-simulators                                                                                
+# OPTIONAL: load modules here                                                                             
+module load Python                                                                                        
+export LMOD_DISABLE_SAME_NAME_AUTOSWAP=no                                                                 
+module load opm-simulators                                                                                
 
-    source ../../../code/venv/bin/activate                                                                    
+source ../../../code/venv/bin/activate                                                                    
 
-    # Set folder based on SLURM_ARRAY_TASK_ID
-    folder="En_${{SLURM_ARRAY_TASK_ID}}"
-                                          
-    python simulator/opm.py "$folder" {filename_str}                                              
-    """
+# Set folder based on SLURM_ARRAY_TASK_ID
+folder="En_${{SLURM_ARRAY_TASK_ID}}/"
+                                     
+python -m simulator.opm "$folder" {filename_str}                                              
+"""
         script_name = "submit_test_parallel_mpi.sh"
         with open(script_name, "w") as f:
             f.write(slurm_script)
@@ -136,11 +136,44 @@ class flow(eclipse):
 
         # Submit the script to SLURM
         cmd = ["sbatch", script_name]
-        run(cmd, capture_output=True, text=True)
+        result = run(cmd, capture_output=True, text=True)
 
-        # remove the sh file
+        # remove script file
         os.remove(script_name)
 
+        # Extract the job ID from the output
+        match = re.search(r"Submitted batch job (\d+)", result.stdout)
+        if match:
+            return match.group(1)  # Return the main job ID
+        else:
+            print("Failed to extract Job ID from sbatch output.")
+            return None
+
+
+    def are_jobs_done(self,job_id):
+        """Check if all job array tasks are completed using sacct."""
+        check_cmd = ["sacct", "-j", job_id, "--format=JobID,State", "--noheader"]
+        check_result = run(check_cmd, capture_output=True, text=True)
+
+        job_states = check_result.stdout.strip().split("\n")
+        for job in job_states:
+            parts = job.split()
+            if len(parts) >= 2:
+               state = parts[1]
+               if state not in ["COMPLETED", "FAILED", "CANCELLED"]:
+                    return False  # A job is still running or pendin
+        return True
+    
+    def wait_for_jobs(self,job_id,wait_time=10):
+        """Wait until all job array tasks are completed."""
+        print(f"Waiting for job array {job_id} to complete...")
+
+        while not self.are_jobs_done(job_id):
+            time.sleep(wait_time)  # Wait for 10 seconds before checking again
+
+        print(f"All jobs in array {job_id} are completed.")
+
+    
 
 class ebos(eclipse):
     """
@@ -205,12 +238,19 @@ class ebos(eclipse):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) != 2:
-        print("Usage: python opm.py <folder> <filename>")
+    if len(sys.argv) != 3:
+        print("Usage: python -m simulator.opm <folder> <filename>")
         sys.exit(1)
 
     folder = sys.argv[1]
     filename = sys.argv[2]
-    sim = flow(input_file={'filename': filename},initialize_parent=False)
+    options = {}
+    options['sim_path'] = ''
+    options['sim_flag'] = ''
+    options['mpi'] = 'mpirun --bind-to none -np 1'
+    options['parsing-strictness'] = ''
+    options['filename'] = filename
+    
+    sim = flow(input_file=options,initialize_parent=False)
     success = sim.call_sim(folder=folder)
     #print("Success!" if success else "Failed.")
