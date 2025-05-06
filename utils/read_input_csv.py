@@ -13,9 +13,26 @@ def convert_to_array(array_str):
         cleaned_str = array_str.replace('[', '').replace(']', '').strip()
         # Split the string by spaces and convert the result to a NumPy array of floats
         return np.array([float(x) for x in cleaned_str.split()])
-    except ValueError:
+    except (ValueError, AttributeError):
         # If the string cannot be converted, return it as is (error handling)
         return array_str
+
+def to_array_if_sequence(val):
+    if isinstance(val, np.ndarray):
+        return val
+    elif isinstance(val, (int, float)):
+        return np.array([val])
+    elif isinstance(val, list):
+        return np.array(val)
+    elif isinstance(val, str) and val.strip().startswith('[') and val.strip().endswith(']'):
+        try:
+            return np.fromstring(val.strip('[]'), sep=' ')
+        except:
+            return val  # fallback in case parsing fails
+    else:
+        return [val]  # wrap scalars
+
+
 def read_data_df(filename, datatype=None, truedataindex=None, outtype='np.array',return_data_info=True):
     """
     Parameters
@@ -41,10 +58,15 @@ def read_data_df(filename, datatype=None, truedataindex=None, outtype='np.array'
     """
 
     # read the file
-    df = pd.read_csv(filename, index_col=0)
+    if filename.endswith('.csv'):
+        df = pd.read_csv(filename, index_col=0)
+    elif filename.endswith('.pkl'):
+        df = pd.read_pickle(filename)
     # convert the string representation of arrays back to NumPy arrays
     for col in df.columns:
         df[col] = df[col].apply(convert_to_array)
+
+    df = df.where(pd.notnull(df), None)
 
     if outtype == 'np.array': # vectorize data
         if datatype is not None:
@@ -78,20 +100,45 @@ def read_data_df(filename, datatype=None, truedataindex=None, outtype='np.array'
     elif outtype == 'list': # return data as a list over row indices. Where each list element is a dictionary with keys equal to column names
         if datatype is not None:
             if truedataindex is not None:
-                data = [{col: df.iloc[ti][col] for col in datatype} for ti in truedataindex]
+                data = [
+                    {
+                        col: to_array_if_sequence(df.iloc[ti][col])
+                        for col in datatype
+                    }
+                    for ti in truedataindex
+                ]
+                
                 if return_data_info:
                     data, list(datatype), [df.index[el] for el in truedataindex]
             else:
-                data = [{col: row[col] for col in datatype} for _, row in df.iterrows()]
+                data = [
+                    {
+                        col: to_array_if_sequence(row[col])
+                        for col in datatype
+                    }
+                    for _, row in df.iterrows()
+                ]
                 if return_data_info:
                     data, list(datatype), list(df.index)
         else:
             if truedataindex is not None:
-                data = [{col: df.iloc[ti][col] for col in df.columns} for ti in truedataindex]
+                data = [
+                    {
+                        col: to_array_if_sequence(df.iloc[ti][col])
+                        for col in df.columns
+                    }
+                    for ti in truedataindex
+                ]
                 if return_data_info:
                     data, list(datatype), list(df.index)
             else:
-                data = [{col: row[col] for col in df.columns} for _, row in df.iterrows()]
+                data = [
+                    {
+                        col: to_array_if_sequence(row[col])
+                        for col in df.columns
+                    }
+                    for _, row in df.iterrows()
+                ]
                 if return_data_info:
                     return data, list(df.columns), list(df.index)
         return data
@@ -118,15 +165,26 @@ def read_var_df(filename, datatype=None, truedataindex=None, outtype='list'):
     """
 
     # read the file
-    with open(filename, 'rb') as f:
-        df = pickle.load(f)
+    if filename.endswith('.csv'):
+        df = pd.read_csv(filename, index_col=0)
+        df.index = df.index.astype(str)  # Convert index to string
+    elif filename.endswith('.pkl'):
+        df = pd.read_pickle(filename)
+    
+    # Perform a one-time conversion of datatype if needed
+    if datatype is not None:
+        try:
+            datatype = [ast.literal_eval(col) for col in datatype]
+        except (ValueError, SyntaxError):
+            pass  # Keep datatype as is if conversion fails
+
 
     if outtype == 'list':
         if datatype is not None:
             if truedataindex is not None:
-                var = [{col: df.loc[ti][ast.literal_eval(col)] for col in datatype} for ti in truedataindex]
+                var = [{col: df.loc[ti][col] for col in datatype} for ti in truedataindex]
             else:
-                var = [{col: row[ast.literal_eval(col)] for col in datatype} for _, row in df.iterrows()]
+                var = [{col: row[col] for col in datatype} for _, row in df.iterrows()]
         else:
             if truedataindex is not None:
                 var = [{col: df.loc[ti][col] for col in df.columns} for ti in truedataindex]

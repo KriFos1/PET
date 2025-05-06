@@ -479,7 +479,7 @@ class Ensemble(PETEnsemble):
 
         # Check if a csv file has been included in TRUEDATA. If so, we read it and make a 2D list, which we can use
         # in the below when assigning data to obs_data dictionary
-        if isinstance(self.keys_da['truedata'], str) and self.keys_da['truedata'].endswith('.csv'):
+        if isinstance(self.keys_da['truedata'], str) and (self.keys_da['truedata'].endswith('.csv') or self.keys_da['truedata'].endswith('.pkl')):
             self.obs_data, self.keys_da['datatype'], self.truedataindex = rcsv.read_data_df(self.keys_da['truedata'],outtype='list')
             self.keys_da['truedataindex'] = self.truedataindex
 
@@ -679,13 +679,19 @@ class Ensemble(PETEnsemble):
             # Init. dict. with datatypes (do inside loop to avoid copy of same entry)
             self.datavar[i] = {}
             for j in range(len(datatype)):  # DATATYPE
-                if self.obs_data[i][datatype[j]] is not None:
+                if self.obs_data[i][datatype[j]][0] is not None:
                     self.datavar[i][datatype[j]] = []
                     for c,el in enumerate(self.obs_data[i][datatype[j]]):
-                        if datavar[i][datatype[j]][c][0].lower() == 'rel':
-                            self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][c][1]*(el*0.01))**2)
-                        elif datavar[i][datatype[j]][c][0].lower() == 'abs':
-                            self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][c][1])
+                        if datavar[i][datatype[j]][0].lower() == 'rel':
+                            if isinstance(datavar[i][datatype[j]][1], float):
+                                self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][1] * (el * 0.01)) ** 2)
+                            else:
+                                self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][1][c]*(el*0.01))**2)
+                        elif datavar[i][datatype[j]][0].lower() == 'abs':
+                            if isinstance(datavar[i][datatype[j]][1], float):
+                                self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][1])
+                            else:
+                                self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][1][c])
                         else:
                             sys.exit()
                     self.datavar[i][datatype[j]] = np.array(self.datavar[i][datatype[j]])

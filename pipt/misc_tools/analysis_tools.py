@@ -943,13 +943,13 @@ def aug_obs_pred_data(obs_data, pred_data, assim_index, list_data):
     # make this more efficient
 
     tot_pred = tuple(pred_data[el][dat] for el in l_prim if pred_data[el]
-                     is not None for dat in list_data if obs_data[el][dat] is not None)
+                     is not None for dat in list_data if obs_data[el][dat][0] is not None)
     if len(tot_pred):  # if this is done during the initiallization tot_pred contains nothing
         pred = np.concatenate(tot_pred)
     else:
         pred = None
     obs = np.concatenate(tuple(
-        obs_data[el][dat] for el in l_prim for dat in list_data if obs_data[el][dat] is not None))
+        obs_data[el][dat] for el in l_prim for dat in list_data if obs_data[el][dat][0] is not None))
 
     # Init. a logical variable to check if it is the first time in the loop below that we extract obs/pred data.
     # Need this because we stack the remaining data horizontally/vertically, and it is possible that we have "None"
