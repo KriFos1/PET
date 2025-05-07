@@ -160,6 +160,12 @@ class Ensemble:
                 if opt == 'en_size':
                     self.multilevel['ne'] = [range(int(el))
                                              for el in self.keys_en['multilevel'][i][1]]
+                if opt == 'scaling':
+                    self.multilevel['scaling'] = [el
+                                             for el in self.keys_en['multilevel'][i][1].split(' ')]
+                if opt == 'scaling_map':
+                    self.multilevel['scaling_map'] = [el
+                                             for el in self.keys_en['multilevel'][i][1].split(' ')]
 
     def _ext_prior_info(self):
         """
@@ -683,9 +689,14 @@ class Ensemble:
             # Index list of ensemble members
             list_member_index = list(ml_ne)
 
+
             # Run prediction in parallel using p_map
-            en_pred = p_map(self.sim.run_fwd_sim, list_state,
-                            list_member_index, num_cpus=no_tot_run, disable=self.disable_tqdm)
+            if no_tot_run==1: # if not in parallel we use regular loop
+                en_pred = [deepcopy(self.sim.run_fwd_sim(state, member_index)) for state, member_index in
+                           tqdm(zip(list_state, list_member_index), total=len(list_state))]
+            else: # Run prediction in parallel using p_map
+                en_pred = p_map(self.sim.run_fwd_sim, list_state,
+                                list_member_index, num_cpus=no_tot_run, disable=self.disable_tqdm)
 
             # List successful runs and crashes
             list_crash = [indx for indx, el in enumerate(en_pred) if el is False]
@@ -727,12 +738,17 @@ class Ensemble:
                     en_pred[list_crash[indx]] = deepcopy(en_pred[el])
 
             # Convert ensemble specific result into pred_data, and filter for NONE data
-            ml_pred_data.append([{typ: np.concatenate(tuple((el[ind][typ][:, np.newaxis]) for el in en_pred), axis=1)
+            ml_pred_data.append([{typ: np.concatenate(tuple((np.atleast_2d(el[ind][typ]).T) for el in en_pred), axis=1)
                                   if any(elem is not None for elem in tuple((el[ind][typ]) for el in en_pred))
                                   else None for typ in en_pred[0][0].keys()} for ind in range(len(en_pred[0]))])
 
         # loop over time instance first, and the level instance.
         self.pred_data = np.array(ml_pred_data).T.tolist()
+
+        # Treat scaling
+        if 'scaling' in self.multilevel:
+            self.pred_data = self.treat_scaling(self.multilevel['scaling'],self.pred_data,self.multilevel['scaling_map'])
+            # this is for fidelity specific scaling of output
 
         self.treat_modeling_error(self.iteration)
 
