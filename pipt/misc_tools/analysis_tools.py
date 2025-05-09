@@ -548,7 +548,11 @@ def calc_objectivefun(pert_obs, pred_data, Cd):
         Nex1 array containing objective function values.
     """
     ne = pred_data.shape[1]
-    r = (pred_data - pert_obs)
+    if pert_obs.ndim == 1:
+        r = pred_data - pert_obs[:, np.newaxis]  # Ensure column-wise subtraction
+    else:
+        r = pred_data - pert_obs  # Direct subtraction if dimensions match
+
     if len(Cd.shape) == 1:
         precission = Cd**(-1)
         data_misfit = np.diag(r.T.dot(r*precission[:, None]))
