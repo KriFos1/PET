@@ -142,17 +142,19 @@ class Assimilate:
                     qaqc.calc_mahalanobis((1, 'time', 2, 'time', 1, None, 2, None))
 
                 # Forecast with the updated state
-                self.calc_forecast()
+                if self.ensemble.iteration <= self.max_iter and self.ensemble.keys_da['rerun_final'] == 'no':
+                    success_iter = True  # If we are not rerunning the final forecast, we assume that the analysis was successful
+                else:
+                    self.calc_forecast()
+                    if 'remove_outliers' in self.ensemble.keys_da:
+                        self.remove_outliers()
 
-                if 'remove_outliers' in self.ensemble.keys_da:
-                    self.remove_outliers()
-
-                # Check convergence (in the update_scheme class). Outputs logical variable to tell the while loop to
-                # stop, and a variable telling what criteria for convergence was reached.
-                # Also check if the objective function has been reduced, and use this function to accept the state and
-                # update the lambda values.
-                #
-                conv, success_iter, self.why_stop = self.ensemble.check_convergence()
+                    # Check convergence (in the update_scheme class). Outputs logical variable to tell the while loop to
+                    # stop, and a variable telling what criteria for convergence was reached.
+                    # Also check if the objective function has been reduced, and use this function to accept the state and
+                    # update the lambda values.
+                    #
+                    conv, success_iter, self.why_stop = self.ensemble.check_convergence()
 
             # if reduction of objective function -> save the state
             if success_iter:
@@ -191,9 +193,12 @@ class Assimilate:
                 else:
                     self.ensemble.iteration += 1
                     pbar_out.update(1)
-                    pbar_out.set_description(
-                        f'Iterations (Obj. func. val:{self.ensemble.data_misfit:.1f}'
-                        f' Reduced: {100 * (1 - (self.ensemble.data_misfit / self.ensemble.prev_data_misfit)):.0f} %)')
+                    try:
+                        pbar_out.set_description(
+                            f'Iterations (Obj. func. val:{self.ensemble.data_misfit:.1f}'
+                            f' Reduced: {100 * (1 - (self.ensemble.data_misfit / self.ensemble.prev_data_misfit)):.0f} %)')
+                    except:
+                        pass
                     # self.pbar_out.refresh()
 
             if 'restartsave' in self.ensemble.keys_da and self.ensemble.keys_da['restartsave'] == 'yes':
