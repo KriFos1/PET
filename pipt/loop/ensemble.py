@@ -679,7 +679,7 @@ class Ensemble(PETEnsemble):
             # Init. dict. with datatypes (do inside loop to avoid copy of same entry)
             self.datavar[i] = {}
             for j in range(len(datatype)):  # DATATYPE
-                if self.obs_data[i][datatype[j]][0] is not None:
+                if self.obs_data[i][datatype[j]] is not None:
                     self.datavar[i][datatype[j]] = []
                     for c,el in enumerate(self.obs_data[i][datatype[j]]):
                         if datavar[i][datatype[j]][0].lower() == 'rel':
