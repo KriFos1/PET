@@ -682,16 +682,10 @@ class Ensemble(PETEnsemble):
                 if self.obs_data[i][datatype[j]] is not None:
                     self.datavar[i][datatype[j]] = []
                     for c,el in enumerate(self.obs_data[i][datatype[j]]):
-                        if datavar[i][datatype[j]][0].lower() == 'rel':
-                            if isinstance(datavar[i][datatype[j]][1], float):
-                                self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][1] * (el * 0.01)) ** 2)
-                            else:
-                                self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][1][c]*(el*0.01))**2)
-                        elif datavar[i][datatype[j]][0].lower() == 'abs':
-                            if isinstance(datavar[i][datatype[j]][1], float):
-                                self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][1])
-                            else:
-                                self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][1][c])
+                        if datavar[i][datatype[j]][c][0].lower() == 'rel':
+                            self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][c][1]*(el*0.01))**2)
+                        elif datavar[i][datatype[j]][c][0].lower() == 'abs':
+                            self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][c][1])
                         else:
                             sys.exit()
                     self.datavar[i][datatype[j]] = np.array(self.datavar[i][datatype[j]])
