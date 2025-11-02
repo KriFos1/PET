@@ -451,22 +451,82 @@ class Ensemble(PETEnsemble):
         #  cases)
         # TODO: Implement loading of data variance from .npz file
         vintage = 0
-        for i in range(len(self.obs_data)):  # TRUEDATAINDEX
+        for i, obs_entry in enumerate(self.obs_data):  # TRUEDATAINDEX
             # Init. dict. with datatypes (do inside loop to avoid copy of same entry)
             self.datavar[i] = {}
-            for j in range(len(datatype)):  # DATATYPE
-                if self.obs_data[i][datatype[j]] is not None:
-                    self.datavar[i][datatype[j]] = []
-                    for c,el in enumerate(self.obs_data[i][datatype[j]]):
-                        if datavar[i][datatype[j]][c][0].lower() == 'rel':
-                            self.datavar[i][datatype[j]].append((datavar[i][datatype[j]][c][1]*(el*0.01))**2)
-                        elif datavar[i][datatype[j]][c][0].lower() == 'abs':
-                            self.datavar[i][datatype[j]].append(datavar[i][datatype[j]][c][1])
-                        else:
-                            sys.exit()
-                    self.datavar[i][datatype[j]] = np.array(self.datavar[i][datatype[j]])
+            for j, dtype in enumerate(datatype):  # DATATYPE
+                obs_values = obs_entry.get(dtype) if isinstance(obs_entry, dict) else None
+
+                # Extract the variance specification for the current datatype
+                var_spec = None
+                dv_entry = datavar[i]
+                if isinstance(dv_entry, dict):
+                    var_spec = dv_entry.get(dtype)
+                elif isinstance(dv_entry, (list, tuple)):
+                    if len(dv_entry) == len(datatype):
+                        candidate = dv_entry[j]
+                        if isinstance(candidate, (list, tuple)):
+                            var_spec = candidate
+                    elif len(dv_entry) == 2 * len(datatype):
+                        candidate = dv_entry[2 * j:2 * j + 2]
+                        if len(candidate) == 2:
+                            var_spec = candidate
+
+                if obs_values is None or var_spec is None:
+                    self.datavar[i][dtype] = None
+                    continue
+
+                # Normalize observation data to a list, keeping scalar entries intact
+                if isinstance(obs_values, np.ndarray):
+                    obs_list = [obs_values.item()] if obs_values.shape == () else obs_values.tolist()
+                elif isinstance(obs_values, (list, tuple)):
+                    obs_list = list(obs_values)
                 else:
-                    self.datavar[i][datatype[j]] = None
+                    obs_list = [obs_values]
+
+                if not any(val is not None for val in obs_list):
+                    self.datavar[i][dtype] = None
+                    continue
+
+                if not isinstance(var_spec, (list, tuple)) or len(var_spec) < 2:
+                    raise ValueError(f"Invalid variance specification for '{dtype}': {var_spec}")
+
+                var_type = var_spec[0].lower()
+                var_value = var_spec[1]
+
+                if var_type == 'abs':
+                    # Absolute variance: copy provided scalar or vector
+                    if isinstance(var_value, (list, tuple, np.ndarray)):
+                        self.datavar[i][dtype] = np.asarray(var_value, dtype=float)
+                    else:
+                        self.datavar[i][dtype] = var_value
+
+                elif var_type == 'rel':
+                    # Relative variance: scale with observed data
+                    if isinstance(var_value, (list, tuple, np.ndarray)):
+                        rel_array = np.asarray(var_value, dtype=float)
+                    else:
+                        rel_array = float(var_value)
+
+                    obs_array = np.array(
+                        [np.nan if val is None else val for val in obs_list],
+                        dtype=float
+                    )
+
+                    if np.isscalar(rel_array):
+                        variance = (rel_array * 0.01 * obs_array) ** 2
+                    else:
+                        if rel_array.shape != obs_array.shape:
+                            raise ValueError(
+                                f"Relative variance for '{dtype}' does not match observed data length "
+                                f"({rel_array.shape} vs {obs_array.shape})."
+                            )
+                        variance = (rel_array * 0.01 * obs_array) ** 2
+
+                    self.datavar[i][dtype] = variance
+
+                else:
+                    raise ValueError(f"Unknown variance type '{var_type}' for datatype '{dtype}'.")
 
         # for i in range(len(self.obs_data)):  # TRUEDATAINDEX
         #     # Init. dict. with datatypes (do inside loop to avoid copy of same entry)
