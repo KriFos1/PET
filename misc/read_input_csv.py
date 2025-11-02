@@ -20,6 +20,8 @@ def convert_to_array(array_str):
 def to_array_if_sequence(val):
     if isinstance(val, np.ndarray):
         return val
+    elif val is None:
+        return None
     elif isinstance(val, (int, float)):
         return np.array([val])
     elif isinstance(val, list):
