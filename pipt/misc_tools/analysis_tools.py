@@ -759,14 +759,15 @@ def gen_covdata(datavar, assim_index, list_data):
 
                     # Calc. var.
                     var = datavar[l_prim[ix]][list_data[i]]
+                    var_arr = np.asarray(var)
 
                     # If var is 2D then it is either full covariance or realizations to generate a sample cov.
                     # If matrix is square assume it is full covariance, note this can go wrong!
-                    if var.ndim == 2:
-                        if var.shape[0] == var.shape[1]:  # full cov
-                            c_var = var
+                    if var_arr.ndim == 2:
+                        if var_arr.shape[0] == var_arr.shape[1]:  # full cov
+                            c_var = var_arr
                         else:
-                            c_var = calc_autocov(var)
+                            c_var = calc_autocov(var_arr)
                     # else we make a diagonal matrix
                     else:  # diagonal, only store vector
                         c_var = var
@@ -774,13 +775,14 @@ def gen_covdata(datavar, assim_index, list_data):
                 else:  # Stack var output
                     # Calc. var.
                     var = datavar[l_prim[ix]][list_data[i]]
+                    var_arr = np.asarray(var)
 
                     # If var is 2D then we generate a sample cov., else we make a diagonal matrix
-                    if var.ndim == 2:  # empirical
-                        if var.shape[0] == var.shape[1]:  # full cov
-                            c_var_temp = var
+                    if var_arr.ndim == 2:  # empirical
+                        if var_arr.shape[0] == var_arr.shape[1]:  # full cov
+                            c_var_temp = var_arr
                         else:
-                            c_var_temp = calc_autocov(var)
+                            c_var_temp = calc_autocov(var_arr)
                         c_var = linalg.block_diag(c_var, c_var_temp)
                     else:  # diagonal, only store vector
                         c_var_temp = var
@@ -937,51 +939,37 @@ def aug_obs_pred_data(obs_data, pred_data, assim_index, list_data):
 
     # make this more efficient
 
-    tot_pred = tuple(pred_data[el][dat] for el in l_prim if pred_data[el]
-                     is not None for dat in list_data if obs_data[el][dat] is not None)
+    tot_pred = []
+    for el in l_prim:
+        if pred_data[el] is None:
+            continue
+        for dat in list_data:
+            if obs_data[el][dat] is None:
+                continue
+            pred_val = pred_data[el][dat]
+            if pred_val is None:
+                continue
+            pred_arr = np.atleast_2d(np.asarray(pred_val))
+            tot_pred.append(pred_arr)
     if len(tot_pred):  # if this is done during the initiallization tot_pred contains nothing
         pred = np.concatenate(tot_pred)
     else:
         pred = None
     obs = np.concatenate(tuple(
-        obs_data[el][dat] for el in l_prim for dat in list_data if obs_data[el][dat] is not None))
+        obs_data[el][dat] for el in l_prim for dat in list_data if obs_data[el][dat] is not None and not (isinstance(obs_data[el][dat], (list, np.ndarray)) and len(obs_data[el][dat]) > 0 and all(x is None for x in obs_data[el][dat]))))
 
-    # Init. a logical variable to check if it is the first time in the loop below that we extract obs/pred data.
-    # Need this because we stack the remaining data horizontally/vertically, and it is possible that we have "None"
-    # input in the first instances of the loop (hence we cannot always say that
-    # self.obs_data[l_prim[0]][list_data[0]] and self.pred_data[l_prim[0]][list_data[0]] will be the
-    # first data we want to extract)
-    # first_time = True
-    #
-    # #initialize obs and pred
-    # obs = None
-    # pred = None
-    #
-    # # Init the augmented arrays.
-    # # Loop over all primary indices
-    # for ix in range(len(l_prim)):
-    #     # Loop over obs_data/pred_data keys
-    #     for i in range(len(list_data)):
-    #         # If there is an observed data here, augment obs and pred
-    #         if obs_data[l_prim[ix]][list_data[i]] is not None:  # No obs/pred data
-    #             if first_time:  # Init. the outputs obs and pred
-    #                 # Switch off the first time logical variable
-    #                 first_time = False
-    #
-    #                 # Observed data:
-    #                 obs = obs_data[l_prim[ix]][list_data[i]]
-    #
-    #                 # Predicted data
-    #                 pred = pred_data[l_prim[ix]][list_data[i]]
-    #
-    #             else:  # Stack the obs and pred outputs
-    #                 # Observed data:
-    #                 obs = np.hstack((obs, obs_data[l_prim[ix]][list_data[i]]))
-    #
-    #                 # Predicted data
-    #                 pred = np.vstack((pred, pred_data[l_prim[ix]][list_data[i]]))
-    #
-    # # Return augmented arrays
+    # Check that pred and obs have compatible shapes
+    if pred is not None and pred.shape[0] != obs.shape[0]:
+        import sys
+        print(f"\n\033[1;31mWARNING: Shape mismatch between predicted and observed data!")
+        print(f"Predicted data shape: {pred.shape}")
+        print(f"Observed data shape: {obs.shape}")
+        print(f"pred.shape[0] = {pred.shape[0]}, obs.shape[0] = {obs.shape[0]}")
+        print("This indicates a mismatch in the number of data points between prediction and observation.")
+        print("Exiting due to incompatible data shapes.\033[1;m")
+        sys.exit(1)
+
+    # Return augmented arrays
     return obs, pred
 
 
