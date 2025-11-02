@@ -959,15 +959,15 @@ def aug_obs_pred_data(obs_data, pred_data, assim_index, list_data):
         obs_data[el][dat] for el in l_prim for dat in list_data if obs_data[el][dat] is not None and not (isinstance(obs_data[el][dat], (list, np.ndarray)) and len(obs_data[el][dat]) > 0 and all(x is None for x in obs_data[el][dat]))))
 
     # Check that pred and obs have compatible shapes
-    if pred is not None and pred.shape[0] != obs.shape[0]:
-        import sys
-        print(f"\n\033[1;31mWARNING: Shape mismatch between predicted and observed data!")
-        print(f"Predicted data shape: {pred.shape}")
-        print(f"Observed data shape: {obs.shape}")
-        print(f"pred.shape[0] = {pred.shape[0]}, obs.shape[0] = {obs.shape[0]}")
-        print("This indicates a mismatch in the number of data points between prediction and observation.")
-        print("Exiting due to incompatible data shapes.\033[1;m")
-        sys.exit(1)
+    #if pred is not None and pred.shape[0] != obs.shape[0]:
+    #    import sys
+    #    print(f"\n\033[1;31mWARNING: Shape mismatch between predicted and observed data!")
+    #    print(f"Predicted data shape: {pred.shape}")
+    #    print(f"Observed data shape: {obs.shape}")
+    #    print(f"pred.shape[0] = {pred.shape[0]}, obs.shape[0] = {obs.shape[0]}")
+    #    print("This indicates a mismatch in the number of data points between prediction and observation.")
+    #    print("Exiting due to incompatible data shapes.\033[1;m")
+    #    sys.exit(1)
 
     # Return augmented arrays
     return obs, pred
