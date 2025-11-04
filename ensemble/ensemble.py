@@ -24,6 +24,10 @@ from pipt.misc_tools import cov_regularization
 from pipt.misc_tools import wavelet_tools as wt
 from misc import read_input_csv as rcsv
 from misc.system_tools.environ_var import OpenBlasSingleThread  # Single threaded OpenBLAS runs
+from scipy import sparse
+from scipy.sparse import coo_matrix
+import scipy.sparse.linalg as spla
+from scipy import linalg
 
 
 
@@ -634,6 +638,11 @@ class Ensemble:
         # loop over time instance first, and the level instance.
         self.pred_data = np.array(ml_pred_data).T.tolist()
 
+        # Treat interpolation
+        if 'interpolate' in self.multilevel:
+            self.pred_data = self.interpolate(self.multilevel['interpolate'],self.pred_data,self.multilevel['interpolate_map'])
+            # this is for fidelity specific interpolation of output
+
         # Treat scaling
         if 'scaling' in self.multilevel:
             self.pred_data = self.treat_scaling(self.multilevel['scaling'],self.pred_data,self.multilevel['scaling_map'])
@@ -667,12 +676,65 @@ class Ensemble:
             # we correct each data at each point in time.
             for assim_index in range(len(self.pred_data)):
                 for dat in self.pred_data[assim_index][-1].keys():
-                    # extract the HF model mean
-                    ref_mean = self.pred_data[assim_index][-1][dat].mean(axis=1)
-                        # modify each level
-                    for level in range(self.tot_level - 1):
-                        self.pred_data[assim_index][level][dat] += (ref_mean - self.pred_data[assim_index][level][dat].mean(axis=1))
+                    if self.obs_data[assim_index][dat] is not None:
+                        # extract the HF model mean
+                        ref_mean = self.pred_data[assim_index][-1][dat].mean(axis=1)
+                            # modify each level
+                        for level in range(self.tot_level - 1):
+                            self.pred_data[assim_index][level][dat] += (ref_mean[:,np.newaxis] - self.pred_data[assim_index][level][dat].mean(axis=1)[:,np.newaxis])
 
 
     def address_ML_error(self):
         print('address_ML_error -- Not yet implemented')
+    
+    def interpolate(self, datatyp, pred, interp_map):
+        for level in self.multilevel['levels']:
+            map_path= interp_map[level]
+            T = sparse.load_npz(map_path) # map is a sparse matrix
+            if T.shape[0] != T.shape[1]: # only do this if needed.
+                for p in pred:
+                    for dat in datatyp:
+                        if dat in p[level] and p[level][dat] is not None:
+                            p[level][dat] = T.T @ p[level][dat]
+        return pred
+
+    def treat_scaling(self,datatyp,pred,scale_map):
+        for level in self.multilevel['levels']:
+            map_path= scale_map[level]
+            T = sparse.load_npz(map_path) # map is a sparse matrix
+            if T.shape[0] != T.shape[1]: # only do this if needed.
+                for p in pred:
+                    for dat in datatyp:
+                        if dat in p[level] and p[level][dat] is not None:
+                            TTt = T @ T.transpose()  # still sparse
+                            # Convert to CSC before solving
+                            TTt_csc = TTt.tocsc()
+
+                            # Invert TT^T efficiently (actually solves linear systems for each column)
+                            I = sparse.eye(TTt_csc.shape[0], format='csc')
+                            try:
+                                TTt_inv = spla.spsolve(TTt_csc, I)
+                                T_pinv = T.transpose() @ TTt_inv
+                            except RuntimeError as e:
+                                if "singular" in str(e).lower():
+                                    print(f"Matrix is singular for level {level}, data type {dat}. Using sparse SVD pseudo-inverse.")
+                                    # Use sparse SVD-based pseudo-inverse (memory efficient for large sparse matrices)
+                                    k = min(T.shape) - 1  # Maximum number of singular values we can compute
+                                
+                                    U, s, Vt = spla.svds(T, k=k)
+                                    # Sort singular values in descending order (svds returns ascending)
+                                    idx = np.argsort(s)[::-1]
+                                    s, U, Vt = s[idx], U[:, idx], Vt[idx, :]
+                                    # Calculate threshold to retain 95% of energy
+                                    energy_cumsum = np.cumsum(s**2)
+                                    n_components = np.searchsorted(energy_cumsum, 0.95 * energy_cumsum[-1]) + 1
+                                    tol = s[min(n_components-1, len(s)-1)] if len(s) > 0 else 1e-10
+                                    # Compute pseudo-inverse using SVD
+                                    s_inv = np.where(s > tol, 1/s, 0)
+                                    T_pinv = (Vt.T * s_inv) @ U.T
+                                else:
+                                    raise e
+
+                            p[level][dat] = T_pinv @ p[level][dat]
+
+        return pred
